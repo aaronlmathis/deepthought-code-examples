@@ -75,4 +75,6 @@ triton==3.3.1
 typing-inspection==0.4.1
 typing_extensions==4.14.0
 tzdata==2025.2
-uvicorn==0.34.3
+gunicorn
+uvicorn
+pydantic-settings
