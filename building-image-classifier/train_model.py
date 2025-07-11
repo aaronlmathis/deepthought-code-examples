@@ -31,7 +31,7 @@ CONFIG = {
     'scheduler_type': 'multistep',        # Step decay at specific milestones
     
     # Training schedule - designed for convergence around epoch 170
-    'num_epochs': 3,                    # Maximum training duration
+    'num_epochs': 300,                    # Maximum training duration
     'early_stopping_patience': 50,       # Allow time for LR decay benefits
     'min_improvement': 0.0005,            # Threshold for meaningful progress
     
