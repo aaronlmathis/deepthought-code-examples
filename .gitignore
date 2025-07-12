@@ -1,2 +1,6 @@
 building-image-classifier/cifar-10/
 .venv
+*.pkl
+*.npz
+*.pt
+*.safetensor
