@@ -1,0 +1,20 @@
+# k8s/overlays/development/deployment-dev.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyramidnet-api
+spec:
+  replicas: 1  # Single instance for development
+  template:
+    spec:
+      containers:
+      - name: pyramidnet-api
+        # Reduced resource requirements for development
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "250m"
+          limits:
+            memory: "6Gi"
+            cpu: "1000m"
+        

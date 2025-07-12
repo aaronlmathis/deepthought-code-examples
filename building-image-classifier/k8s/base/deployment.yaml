@@ -1,0 +1,119 @@
+
+
+# k8s/base/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyramidnet-api
+  labels:
+    app: pyramidnet-api
+    component: api
+spec:
+  replicas: 3  # Start with 3 instances for high availability
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Allow 1 extra pod during updates
+      maxUnavailable: 0  # Ensure zero downtime during updates
+  selector:
+    matchLabels:
+      app: pyramidnet-api
+      component: api
+  template:
+    metadata:
+      labels:
+        app: pyramidnet-api
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+      - name: pyramidnet-api
+        image: pyramidnet-api:v1.0.0
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        
+        # Environment variables from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: pyramidnet-config
+        
+        # Resource limits and requests
+        resources:
+          requests:
+            memory: "512Mi"    # Minimum memory guaranteed
+            cpu: "250m"        # Minimum CPU (0.25 cores)
+          limits:
+            memory: "2Gi"      # Maximum memory allowed
+            cpu: "1000m"       # Maximum CPU (1 core)
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 60  # Wait for model loading
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 20
+        
+        # Startup probe for slow-starting applications (model loading)
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 20
+
+        # Security context for container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true  # Set root filesystem to read-only
+          capabilities:
+            drop:
+            - ALL
+        
+        # Volume mounts for writable directories
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: log-volume
+          mountPath: /app/logs
+        - name: cache-volume
+          mountPath: /app/.cache
+      
+      # Volumes for writable directories
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: log-volume
+        emptyDir: {}
+      - name: cache-volume
+        emptyDir: {}
+      
+      # Pod termination grace period
+      terminationGracePeriodSeconds: 30

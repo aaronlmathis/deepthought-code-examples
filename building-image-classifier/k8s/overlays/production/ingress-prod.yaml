@@ -1,0 +1,28 @@
+# k8s/overlays/production/ingress-prod.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pyramidnet-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"  # Allow 10MB uploads
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Automatic SSL certificates
+    nginx.ingress.kubernetes.io/rate-limit: "100"       # Rate limiting
+spec:
+  tls:
+  - hosts:
+    - api.yourdomain.com
+    secretName: pyramidnet-tls
+  
+  rules:
+  - host: api.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pyramidnet-service
+            port:
+              number: 80

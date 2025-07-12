@@ -1,0 +1,32 @@
+# k8s/base/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyramidnet-config
+  labels:
+    app: pyramidnet-api
+    component: config
+data:
+  # Application configuration
+  CLASSIFIER_ENVIRONMENT: "production"
+  CLASSIFIER_HOST: "0.0.0.0"
+  CLASSIFIER_PORT: "8000"
+  CLASSIFIER_DEBUG: "false"
+  CLASSIFIER_LOG_LEVEL: "INFO"
+  CLASSIFIER_RELOAD: "false"
+  CLASSIFIER_ACCESS_LOG: "true"
+  
+  # Model configuration
+  CLASSIFIER_MODEL_DEVICE: "cpu"
+  CLASSIFIER_MODEL_PATH: "models/best_pyramidnet_model.pth"
+  
+  # Performance settings
+  CLASSIFIER_MAX_CONCURRENT_REQUESTS: "50"
+  CLASSIFIER_WORKER_TIMEOUT: "300"
+  CLASSIFIER_PREDICTION_TIMEOUT: "30"
+  
+  # Security settings (non-sensitive values only)
+  CLASSIFIER_MAX_REQUEST_SIZE: "10485760"  # 10MB
+  
+  # CORS settings
+  CLASSIFIER_CORS_ORIGINS: '["http://localhost:3000","https://deepthought.sh"]'

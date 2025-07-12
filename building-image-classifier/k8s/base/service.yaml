@@ -1,0 +1,18 @@
+# k8s/base/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyramidnet-service
+  labels:
+    app: pyramidnet-api
+    component: service
+spec:
+  type: ClusterIP  # Internal service only
+  ports:
+  - port: 80         # Service port
+    targetPort: 8000 # Container port
+    protocol: TCP
+    name: http
+  selector:
+    app: pyramidnet-api
+    component: api

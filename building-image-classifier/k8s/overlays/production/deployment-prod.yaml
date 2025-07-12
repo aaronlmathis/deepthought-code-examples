@@ -1,0 +1,79 @@
+# k8s/overlays/production/deployment-prod.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyramidnet-api
+spec:
+  replicas: 5  # Higher replica count for production
+  template:
+    metadata:
+      annotations:
+        # Production monitoring annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Production security settings
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      containers:
+      - name: pyramidnet-api
+        # Production resource settings
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        
+        # Strict health checks for production
+        livenessProbe:
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 18  # Allow 3 minutes for production startup
+        
+        # Enhanced security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true  # Set root filesystem to read-only
+          capabilities:
+            drop:
+            - ALL
+        
+        # Volume mounts for writable directories
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: log-volume
+          mountPath: /app/logs
+        - name: cache-volume
+          mountPath: /app/.cache
+      
+      # Volumes for writable directories
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      - name: log-volume
+        emptyDir: {}
+      - name: cache-volume
+        emptyDir: {}

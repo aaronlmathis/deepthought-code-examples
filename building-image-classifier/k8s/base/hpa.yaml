@@ -1,0 +1,55 @@
+# k8s/base/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pyramidnet-hpa
+  labels:
+    app: pyramidnet-api
+    component: autoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pyramidnet-api
+  
+  minReplicas: 1   # Higher minimum for production
+  maxReplicas: 3   # Allow more scaling for production traffic
+  
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # More conservative CPU threshold
+  
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # More conservative memory threshold
+  
+  # Custom metrics (if Prometheus adapter is available)
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30  # Faster scale-up for production
+      policies:
+      - type: Percent
+        value: 100  # Can double pods quickly if needed
+        periodSeconds: 30
+      - type: Pods
+        value: 4    # Or add up to 4 pods at once
+        periodSeconds: 30
+      selectPolicy: Max
+    
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Wait 10 minutes before scaling down

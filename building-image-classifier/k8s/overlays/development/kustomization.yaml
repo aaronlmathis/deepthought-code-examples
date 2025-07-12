@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: pyramidnet-api
+
+resources:
+- ../../base
+- ingress-dev.yaml
+
+patches:
+- path: deployment-dev.yaml
+  target:
+    kind: Deployment
+    name: pyramidnet-api
+
+configMapGenerator:
+- name: pyramidnet-config
+  behavior: merge
+  literals:
+  - CLASSIFIER_ENVIRONMENT=development
+  - CLASSIFIER_DEBUG=true
+  - CLASSIFIER_LOG_LEVEL=DEBUG
+  - CLASSIFIER_CORS_ORIGINS=["http://localhost:3000","http://localhost:8080"]
+
+namespace: pyramidnet-dev

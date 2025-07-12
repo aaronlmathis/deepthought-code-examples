@@ -1,0 +1,36 @@
+# k8s/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: pyramidnet-production
+
+# Include base configurations
+bases:
+- ../../base
+
+# Production-specific patches
+patchesStrategicMerge:
+- deployment-prod.yaml
+- hpa-prod.yaml
+
+# Production-specific resources
+resources:
+- ingress-prod.yaml
+
+# Production configuration
+configMapGenerator:
+- name: pyramidnet-config
+  behavior: merge
+  literals:
+  - CLASSIFIER_ENVIRONMENT=production
+  - CLASSIFIER_DEBUG=false
+  - CLASSIFIER_LOG_LEVEL=INFO
+  - CLASSIFIER_MAX_CONCURRENT_REQUESTS=100
+  - CLASSIFIER_CORS_ORIGINS=["https://yourdomain.com","https://www.yourdomain.com"]
+
+# Namespace for production
+namespace: pyramidnet-prod
+
+# Name prefix for production resources
+namePrefix: prod-
