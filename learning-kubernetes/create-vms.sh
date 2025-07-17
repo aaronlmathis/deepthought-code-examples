@@ -5,7 +5,8 @@ set -e # Exit immediately if a command exits with a non-zero status.
 BASE_IMG_FILENAME="noble-server-cloudimg-amd64.img"
 UBUNTU_CLOUD_IMG_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
 VM_NAMES=("master-1" "worker-1" "worker-2")
-SSH_PUB_KEY="$(cat /home/amathis/.ssh/id_rsa.pub)" # IMPORTANT: REPLACE WITH YOUR ACTUAL PUBLIC SSH KEY
+VM_IPS=("192.168.122.101/24" "192.168.122.102/24" "192.168.122.103/24")
+SSH_PUB_KEY="$(cat /home/<YOUR USERNAME>/.ssh/id_rsa.pub)" # IMPORTANT: REPLACE WITH YOUR ACTUAL PUBLIC SSH KEY
 VM_RAM=4096
 VM_VCPUS=2
 VM_DISK_SIZE=30 # GB
@@ -70,9 +71,12 @@ fi
 echo "--- Starting VM Provisioning ---"
 
 # Loop through each VM to create unique cloud-init data and install the VM
-for VM in "${VM_NAMES[@]}"; do
-  echo "Processing VM: $VM"
+for i in "${!VM_NAMES[@]}"; do
+  VM="${VM_NAMES[$i]}"
+  CURRENT_IP="${VM_IPS[$i]}"
   
+  echo "Processing VM: $VM with IP: $CURRENT_IP"
+
   # Define paths for temporary cloud-init files and the seed ISO
   TEMP_DIR="/tmp/cloud-init-$$" # Use $$ for a unique temporary directory for each run
   mkdir -p "$TEMP_DIR" || { echo "ERROR: Failed to create temporary directory $TEMP_DIR. Exiting."; exit 1; } # Added error handling for mkdir
@@ -93,17 +97,26 @@ preserve_hostname: false
 hostname: ${VM}
 manage_etc_hosts: true
 
-# Set timezone
-timezone: UTC
+# Completely disable cloud-init network management
+network:
+  config: disabled
 
-# Enable password authentication for debugging
+bootcmd:
+  # Kill any DHCP processes immediately
+  - [ pkill, -f, dhcp ]
+  - [ systemctl, stop, systemd-networkd ]
+  - [ systemctl, stop, NetworkManager ]
+  # Remove all existing network configs
+  - [ rm, -rf, /etc/netplan/* ]
+  - [ rm, -f, /etc/cloud/cloud.cfg.d/*network* ]
+  - [ rm, -f, /var/lib/dhcp/* ]
+
+timezone: UTC
 ssh_pwauth: true
 chpasswd:
   list: |
     ubuntu:ubuntu123
   expire: false
-
-# User configuration
 users:
   - name: ubuntu
     sudo: ALL=(ALL) NOPASSWD:ALL
@@ -112,21 +125,17 @@ users:
     lock_passwd: false
     ssh_authorized_keys:
       - ${SSH_PUB_KEY}
-
-# Disable root login but keep root account
 disable_root: true
-
-# Package updates and installations
 package_update: true
 package_upgrade: false
 packages:
   - qemu-guest-agent
+  - net-tools
   - curl
   - wget
   - vim
   - htop
 
-# Write files for SSH configuration
 write_files:
   - path: /etc/ssh/sshd_config.d/99-cloud-init.conf
     content: |
@@ -134,22 +143,67 @@ write_files:
       PubkeyAuthentication yes
       PermitRootLogin no
     permissions: '0644'
+  - path: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+    content: |
+      network: {config: disabled}
+    permissions: '0644'
+  - path: /etc/systemd/network/10-static.network
+    permissions: '0644'
+    content: |
+      [Match]
+      Name=en*
 
-# Commands to run after package installation
+      [Network]
+      DHCP=no
+      Address=${CURRENT_IP}
+      Gateway=192.168.122.1
+      DNS=8.8.8.8
+      DNS=1.1.1.1
+  - path: /etc/systemd/network/20-virtio.network
+    permissions: '0644'
+    content: |
+      [Match]
+      Driver=virtio_net
+
+      [Network]
+      DHCP=no
+      Address=${CURRENT_IP}
+      Gateway=192.168.122.1
+      DNS=8.8.8.8
+      DNS=1.1.1.1
+
 runcmd:
-  - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
-  - systemctl restart sshd
-  - cloud-init status --wait
-  - echo "Cloud-init completed for ${VM}" > /var/log/cloud-init-complete.log
+  # Disable all network managers except systemd-networkd
+  - [ systemctl, disable, NetworkManager ]
+  - [ systemctl, mask, NetworkManager ]
+  - [ systemctl, stop, NetworkManager ]
+  
+  # Kill any remaining DHCP clients
+  - [ pkill, -f, dhcp ]
+  - [ rm, -rf, /var/lib/dhcp/* ]
+  
+  # Remove any netplan configs that might interfere
+  - [ rm, -rf, /etc/netplan/* ]
+  
+  # Enable and start systemd-networkd
+  - [ systemctl, enable, systemd-networkd ]
+  - [ systemctl, enable, systemd-resolved ]
+  - [ systemctl, start, systemd-networkd ]
+  - [ systemctl, start, systemd-resolved ]
+  
+  # Wait for network to come up
+  - [ sleep, 15 ]
+  
+  # Verify connectivity
+  - [ ip, addr, show ]
+  - [ ping, -c, 3, 8.8.8.8 ]
+  
+  # Enable services
+  - [ systemctl, enable, qemu-guest-agent ]
+  - [ systemctl, start, qemu-guest-agent ]
+  - [ systemctl, restart, sshd ]
 
-# Final message
-final_message: "Cloud-init setup complete for ${VM}. System is ready."
-
-# Enable cloud-init debugging
-debug:
-  verbose: true
-
+final_message: "Cloud-init setup complete for ${VM}. Static IP configured: ${CURRENT_IP}"
 EOF
 
   cat <<EOF > "$LOCAL_META_DATA"
