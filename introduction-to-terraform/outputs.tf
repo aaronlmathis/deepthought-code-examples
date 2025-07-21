@@ -1,7 +1,16 @@
-output "vm_ips" {
-  description = "A map of VM names to their configured IP addresses."
+output "master_ips" {
+  description = "A map of master VM names to their configured IP addresses."
   value = {
     for name, node in local.nodes : name => node.ip
+    if startswith(name, "master-")
+  }
+}
+
+output "worker_ips" {
+  description = "A map of worker VM names to their configured IP addresses."
+  value = {
+    for name, node in local.nodes : name => node.ip
+    if startswith(name, "worker-")
   }
 }
 
@@ -11,3 +20,4 @@ output "ssh_commands" {
     for name, node in local.nodes : name => "ssh ubuntu@${node.ip}"
   }
 }
+
