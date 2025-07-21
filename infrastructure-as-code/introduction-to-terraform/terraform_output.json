@@ -1,0 +1,62 @@
+{
+  "master_ips": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "master-1": "string"
+      }
+    ],
+    "value": {
+      "master-1": "192.168.122.100"
+    }
+  },
+  "ssh_commands": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "master-1": "string",
+        "worker-1": "string",
+        "worker-2": "string",
+        "worker-3": "string",
+        "worker-4": "string"
+      }
+    ],
+    "value": {
+      "master-1": "ssh ubuntu@192.168.122.100",
+      "worker-1": "ssh ubuntu@192.168.122.101",
+      "worker-2": "ssh ubuntu@192.168.122.102",
+      "worker-3": "ssh ubuntu@192.168.122.103",
+      "worker-4": "ssh ubuntu@192.168.122.104"
+    }
+  },
+  "ssh_private_key_path": {
+    "sensitive": false,
+    "type": "string",
+    "value": "~/.ssh/id_rsa"
+  },
+  "ssh_user": {
+    "sensitive": false,
+    "type": "string",
+    "value": "ubuntu"
+  },
+  "worker_ips": {
+    "sensitive": false,
+    "type": [
+      "object",
+      {
+        "worker-1": "string",
+        "worker-2": "string",
+        "worker-3": "string",
+        "worker-4": "string"
+      }
+    ],
+    "value": {
+      "worker-1": "192.168.122.101",
+      "worker-2": "192.168.122.102",
+      "worker-3": "192.168.122.103",
+      "worker-4": "192.168.122.104"
+    }
+  }
+}

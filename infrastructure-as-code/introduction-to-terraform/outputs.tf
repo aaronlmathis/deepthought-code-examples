@@ -21,3 +21,12 @@ output "ssh_commands" {
   }
 }
 
+output "ssh_user" {
+  description = "The SSH user for connecting to VMs"
+  value       = "ubuntu"
+}
+
+output "ssh_private_key_path" {
+  description = "The SSH private key path for connecting to VMs"
+  value       = replace(var.ssh_public_key_path, ".pub", "")
+}
