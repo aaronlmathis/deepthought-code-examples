@@ -4,3 +4,5 @@ building-image-classifier/cifar-10/
 *.npz
 *.pt
 *.safetensor
+terraform.tfstate
+*.terraform*
