@@ -1,0 +1,56 @@
+name: 'Homelab IaC Pipeline'
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infrastructure-as-code/**'
+
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure-as-code/**'
+
+jobs:
+  validate:
+    name: 'Lint and Validate'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+        working-directory: ./infrastructure-as-code
+      - run: terraform validate
+        working-directory: ./infrastructure-as-code
+
+  plan:
+    name: 'Terraform Plan'
+    needs: validate
+    if: github.event_name == 'pull_request'
+    runs-on: [self-hosted, homelab]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Setup SSH Key'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+      - name: 'Run Terraform Plan'
+        run: make plan
+        working-directory: ./infrastructure-as-code
+
+  deploy:
+    name: 'Deploy to Homelab'
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, homelab]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Setup SSH Key'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+      - name: 'Run Makefile to Deploy'
+        run: make all
+        working-directory: ./infrastructure-as-code
