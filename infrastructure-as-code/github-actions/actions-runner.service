@@ -1,0 +1,21 @@
+[Unit]
+Description=GitHub Actions Self-Hosted Runner
+After=network.target
+
+[Service]
+# Replace <your_user> with the user that configured the runner
+User=<your_user>
+Group=<your_user>
+
+# Replace with the absolute path to your runner's directory
+WorkingDirectory=/path/to/actions-runner
+
+# The command to start the runner
+ExecStart=/path/to/actions-runner/run.sh
+
+# Restart the service if it fails
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
