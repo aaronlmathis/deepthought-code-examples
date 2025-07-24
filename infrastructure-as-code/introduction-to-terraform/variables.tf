@@ -1,9 +1,9 @@
 variable "nodes" {
   type = map(object({
-    memory = number
-    vcpu   = number
+    memory    = number
+    vcpu      = number
     disk_size = number
-    ip     = string
+    ip        = string
   }))
 
   default     = null

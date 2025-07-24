@@ -13,9 +13,9 @@ provider "libvirt" {
 
 # Create cloud-init ISO per VM
 resource "libvirt_cloudinit_disk" "cloudinit" {
-  for_each  = local.nodes
+  for_each = local.nodes
 
-  name      = "${each.key}-cloudinit.iso"
+  name = "${each.key}-cloudinit.iso"
   network_config = templatefile("${path.module}/cloud-init/network-config.tpl", {
     ip         = each.value.ip
     gateway    = var.network_gateway
@@ -24,8 +24,8 @@ resource "libvirt_cloudinit_disk" "cloudinit" {
     nameserver = var.network_nameserver
   })
   user_data = templatefile("${path.module}/cloud-init/user-data.tpl", {
-    hostname    = each.key
-    ssh_key     = file(pathexpand(var.ssh_public_key_path))
+    hostname = each.key
+    ssh_key  = file(pathexpand(var.ssh_public_key_path))
   })
 }
 
@@ -41,12 +41,12 @@ resource "libvirt_volume" "base_image" {
 
 # Create OS disk per VM (backed by base image)
 resource "libvirt_volume" "disk" {
-  for_each = local.nodes
-  name     = "${each.key}.qcow2"
-  pool     = var.storage_pool_name
-  base_volume_id   = libvirt_volume.base_image.id
-  size     = each.value.disk_size
-  format   = "qcow2"
+  for_each       = local.nodes
+  name           = "${each.key}.qcow2"
+  pool           = var.storage_pool_name
+  base_volume_id = libvirt_volume.base_image.id
+  size           = each.value.disk_size
+  format         = "qcow2"
 }
 
 # Define the VM
