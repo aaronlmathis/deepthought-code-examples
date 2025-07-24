@@ -1,0 +1,96 @@
+---
+# roles/istio/tasks/main.yml
+
+- name: Download Istio release archive
+  ansible.builtin.get_url:
+    url: "https://github.com/istio/istio/releases/download/{{ istio_version }}/istio-{{ istio_version }}-linux-amd64.tar.gz"
+    dest: "/tmp/istio-{{ istio_version }}.tar.gz"
+    mode: '0644'
+
+- name: Unpack istioctl
+  ansible.builtin.unarchive:
+    src: "/tmp/istio-{{ istio_version }}.tar.gz"
+    dest: "/usr/local"
+    remote_src: yes
+    creates: "{{ istio_install_dir }}/bin/istioctl"
+
+- name: Ensure istioctl is on PATH (symlink)
+  ansible.builtin.file:
+    src: "{{ istio_install_dir }}/bin/istioctl"
+    dest: /usr/local/bin/istioctl
+    state: link
+
+- name: Check if Istio is already installed
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    name: istiod
+    namespace: istio-system
+  register: istiod_deployment
+  ignore_errors: true
+
+- name: Create istio-system namespace
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: istio-system
+    state: present
+  when: istiod_deployment.resources | default([]) | length == 0
+
+- name: Install Istio control plane using generated manifest
+  ansible.builtin.shell:
+    cmd: >
+      istioctl manifest generate --set profile={{ istio_profile }} | kubectl apply -f -
+  when: istiod_deployment.resources | default([]) | length == 0
+  register: istio_install_result
+  changed_when: "'created' in istio_install_result.stdout or 'configured' in istio_install_result.stdout"
+
+- name: Wait for Istiod deployment to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status deployment/istiod -n istio-system --timeout=300s
+  changed_when: false
+
+- name: Wait for Istio Ingress Gateway deployment to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status deployment/istio-ingressgateway -n istio-system --timeout=300s
+  changed_when: false
+
+# - name: Create Istio Gateway
+#   kubernetes.core.k8s:
+#     state: present
+#     definition:
+#       apiVersion: networking.istio.io/v1beta1
+#       kind: Gateway
+#       metadata:
+#         name: "{{ istio_gateway_name }}"
+#         namespace: "{{ istio_app_namespace }}"
+#       spec:
+#         selector:
+#           istio: ingressgateway
+#         servers:
+#         - port:
+#             number: 80
+#             name: http
+#             protocol: HTTP
+#           hosts:
+#           - "*"
+#
+# - name: Create Istio VirtualService
+#   kubernetes.core.k8s:
+#     state: present
+#     definition:
+#       apiVersion: networking.istio.io/v1beta1
+#       kind: VirtualService
+#       metadata:
+#         name: "{{ istio_virtualservice_name }}"
+#         namespace: "{{ istio_app_namespace }}"
+#       spec:
+#         hosts:
+#         - "*"
+#         gateways:
+#         - "{{ istio_gateway_name }}"
+#         http:
+#         - route:
+#           - destination:
+#               host: frontend-external
+#               port:
+#                 number: 80

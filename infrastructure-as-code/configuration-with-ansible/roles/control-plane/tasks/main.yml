@@ -1,3 +1,5 @@
+---
+# roles/control-plane/tasks/main.yml
 - name: Check if kubeadm has already run
   ansible.builtin.stat:
     path: /etc/kubernetes/admin.conf
@@ -44,6 +46,24 @@
     KUBECONFIG: /home/ubuntu/.kube/config
   when: not kubeadm_init_stat.stat.exists
   register: calico_install
+
+- name: Wait for Calico Controller to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status deployment/calico-kube-controllers -n kube-system --timeout=300s
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false
+  when: not kubeadm_init_stat.stat.exists
+
+- name: Wait for Calico Node DaemonSet to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status daemonset/calico-node -n kube-system --timeout=300s
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false
+  when: not kubeadm_init_stat.stat.exists
 
 - name: Display Calico installation result
   ansible.builtin.debug:

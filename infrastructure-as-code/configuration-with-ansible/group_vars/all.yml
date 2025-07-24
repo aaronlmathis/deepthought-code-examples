@@ -1,0 +1,22 @@
+---
+# Cluster Configuration
+cluster_domain: "local"
+kubernetes_version: "1.28.*"
+
+# Component Versions
+helm_version: "3.18.0"
+istio_version: "1.22.3"
+
+
+# Network Configuration
+metallb_ip_addresses: 
+  - "192.168.122.200-192.168.122.220"
+metallb_pool_name: "default-pool"
+
+# Security Configuration
+enable_pod_security_policies: true
+enable_network_policies: true
+
+# # Application Configuration
+# online_boutique_namespace: "online-boutique"
+# online_boutique_replicas: 1

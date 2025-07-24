@@ -1,0 +1,6 @@
+---
+# Which Helm version to install (no leading "v")
+helm_version: "3.18.0"
+
+# Where to install the helm binary
+helm_install_dir: "/usr/local/bin"

@@ -1,0 +1,55 @@
+# filepath: roles/validation/tasks/main.yml
+---
+- name: Verify cluster nodes are ready
+  ansible.builtin.command:
+    cmd: kubectl get nodes --no-headers
+  register: nodes_status
+  changed_when: false
+  failed_when: "'NotReady' in nodes_status.stdout"
+
+- name: Verify critical pods are running
+  ansible.builtin.command:
+    cmd: kubectl get pods -n kube-system --field-selector=status.phase!=Running --no-headers
+  register: failed_pods
+  changed_when: false
+  failed_when: failed_pods.stdout_lines | length > 0
+
+- name: Verify Istio installation
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: istiod
+    namespace: istio-system
+  register: istio_status
+  failed_when: >
+    istio_status.resources | length == 0 or
+    istio_status.resources[0].status.readyReplicas != istio_status.resources[0].status.replicas
+
+- name: Verify MetalLB is operational
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: metallb-controller
+    namespace: metallb-system
+  register: metallb_status
+  failed_when: >
+    metallb_status.resources | length == 0 or
+    metallb_status.resources[0].status.readyReplicas != metallb_status.resources[0].status.replicas
+
+- name: Verify persistent storage is available
+  kubernetes.core.k8s_info:
+    kind: StorageClass
+    name: local-path
+  register: storage_class_status
+  failed_when: >
+    storage_class_status.resources | length == 0 or
+    storage_class_status.resources[0].metadata.get('annotations', {}).get('storageclass.kubernetes.io/is-default-class') != 'true'
+
+- name: Display validation results
+  ansible.builtin.debug:
+    msg:
+      - "Cluster validation completed:"
+      - "Nodes ready: {{ nodes_status.stdout_lines | length }}"
+      - "Istio ready: {{ istio_status.resources[0].status.readyReplicas | default(0) }}/{{ istio_status.resources[0].status.replicas | default(0) }}"
+      - "MetalLB ready: {{ metallb_status.resources[0].status.readyReplicas | default(0) }}/{{ metallb_status.resources[0].status.replicas | default(0) }}"
+      - "Persistent Storage (StorageClass) ready: {{ 'yes' if storage_class_status.resources | length > 0 else 'no' }}"

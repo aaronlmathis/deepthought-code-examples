@@ -1,0 +1,16 @@
+---
+# roles/istio/defaults/main.yml
+
+# Which version of Istio to install
+istio_version: "1.22.3"
+
+# Profile to install (default, minimal, demo, etc)
+istio_profile: "default"
+
+# Where to unpack istioctl
+istio_install_dir: "/usr/local/istio-{{ istio_version }}"
+
+# # Your application namespace and Istio resources
+# istio_app_namespace: "onlineboutique"
+# istio_gateway_name: "onlineboutique-gateway"
+# istio_virtualservice_name: "onlineboutique-vs"

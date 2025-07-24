@@ -1,0 +1,84 @@
+---
+# roles/metallb/tasks/main.yml
+
+- name: Add MetalLB Helm repository
+  kubernetes.core.helm_repository:
+    name: metallb
+    repo_url: https://metallb.github.io/metallb
+    state: present
+
+- name: Create metallb-system namespace
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: metallb-system
+    state: present
+
+- name: Label metallb-system for privileged Pod Security
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: metallb-system
+    merge_type: strategic-merge
+    definition:
+      metadata:
+        labels:
+          pod-security.kubernetes.io/enforce: privileged
+          pod-security.kubernetes.io/audit:    privileged
+          pod-security.kubernetes.io/warn:     privileged
+
+- name: Install MetalLB chart via Helm
+  kubernetes.core.helm:
+    name: metallb
+    chart_ref: metallb/metallb
+    release_namespace: metallb-system
+    create_namespace: false
+    wait: true
+    state: present
+
+- name: Wait for MetalLB Controller to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status deployment/metallb-controller -n metallb-system --timeout=300s
+  changed_when: false
+
+- name: Wait for MetalLB Speaker to be ready
+  ansible.builtin.command:
+    cmd: kubectl rollout status daemonset/metallb-speaker -n metallb-system --timeout=300s
+  changed_when: false
+
+- name: Wait for MetalLB webhook to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Endpoints
+    name: metallb-webhook-service
+    namespace: metallb-system
+  register: webhook_ep
+  until: webhook_ep.resources | length > 0 and webhook_ep.resources[0].subsets is defined and webhook_ep.resources[0].subsets | length > 0
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Configure MetalLB IPAddressPool
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: IPAddressPool
+      metadata:
+        name: "{{ metallb_pool_name }}"
+        namespace: metallb-system
+      spec:
+        addresses: "{{ metallb_ip_addresses }}"
+
+- name: Configure MetalLB L2Advertisement
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: metallb.io/v1beta1
+      kind: L2Advertisement
+      metadata:
+        name: default
+        namespace: metallb-system
+      spec:
+        ipAddressPools:
+          - "{{ metallb_pool_name }}"

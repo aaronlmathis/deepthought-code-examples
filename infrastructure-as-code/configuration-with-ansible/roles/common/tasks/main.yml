@@ -1,3 +1,15 @@
+- name: Log system information
+  ansible.builtin.debug:
+    msg:
+      - "=== Node Information ==="
+      - "Node: {{ inventory_hostname }}"
+      - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      - "Kernel: {{ ansible_kernel }}"
+      - "Memory: {{ ansible_memtotal_mb }}MB"
+      - "CPU: {{ ansible_processor_vcpus }} cores"
+      - "Architecture: {{ ansible_architecture }}"
+      - "========================"
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: yes
@@ -47,3 +59,9 @@
     - { key: 'net.bridge.bridge-nf-call-iptables', value: 1 }
     - { key: 'net.ipv4.ip_forward', value: 1 }
     - { key: 'net.bridge.bridge-nf-call-ip6tables', value: 1 }
+
+
+- name: Log package installation results
+  ansible.builtin.debug:
+    msg: "Installed packages: {{ apt_result.stdout_lines | default([]) }}"
+  when: apt_result is defined and apt_result.changed

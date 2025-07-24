@@ -1,3 +1,5 @@
+---
+# roles/worker/tasks/main.yml
 - name: Check if node is already joined
   ansible.builtin.stat:
     path: /etc/kubernetes/kubelet.conf

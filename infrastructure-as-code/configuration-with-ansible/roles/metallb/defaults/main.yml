@@ -1,0 +1,9 @@
+---
+# roles/metallb/defaults/main.yml
+
+# Address range(s) for your LoadBalancer services
+metallb_ip_addresses: 
+  - "192.168.122.200-192.168.122.220"
+
+# Name of the IPPool
+metallb_pool_name: default-pool

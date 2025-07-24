@@ -1,0 +1,65 @@
+---
+- name: Check minimum system requirements
+  assert:
+    that:
+      - ansible_memtotal_mb >= 2048
+      - ansible_processor_vcpus >= 2
+      - ansible_architecture == "x86_64"
+    fail_msg: "Insufficient resources: need 2GB RAM, 2 CPU cores, and x86_64 architecture"
+
+- name: Check disk space
+  assert:
+    that:
+      - ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='size_available') | first > 10000000000
+    fail_msg: "Insufficient disk space: need at least 20GB free space on root partition"
+
+- name: Verify required ports are not in use
+  wait_for:
+    port: "{{ item }}"
+    state: stopped
+    timeout: 1
+    host: "{{ ansible_default_ipv4.address }}"
+  loop:
+    - 6443  # Kubernetes API
+    - 10250 # kubelet
+    - 10259 # kube-scheduler
+    - 10257 # kube-controller-manager
+    - 2379  # etcd
+    - 2380  # etcd
+  ignore_errors: true
+  register: port_check
+
+- name: Report port conflicts
+  ansible.builtin.debug:
+    msg: "WARNING: Port {{ item.item }} appears to be in use"
+  when: item.failed is defined and item.failed
+  loop: "{{ port_check.results }}"
+
+- name: Check container runtime prerequisites
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - "modinfo overlay"
+    - "modinfo br_netfilter"
+  register: kernel_modules
+  failed_when: false
+  changed_when: false
+
+- name: Verify kernel modules
+  assert:
+    that:
+      - kernel_modules.results[0].rc == 0
+      - kernel_modules.results[1].rc == 0
+    fail_msg: "Required kernel modules (overlay, br_netfilter) are not available"
+
+- name: Check SELinux status
+  ansible.builtin.command:
+    cmd: getenforce
+  register: selinux_status
+  failed_when: false
+  changed_when: false
+
+- name: Warn about SELinux
+  ansible.builtin.debug:
+    msg: "WARNING: SELinux is {{ selinux_status.stdout }}. Consider setting to permissive for Kubernetes"
+  when: selinux_status.rc == 0 and selinux_status.stdout == "Enforcing"

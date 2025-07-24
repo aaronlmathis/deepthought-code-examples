@@ -1,0 +1,19 @@
+---
+# roles/storage/tasks/main.yml
+
+- name: Install Local Path Provisioner
+  kubernetes.core.k8s:
+    state: present
+    src: https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+  run_once: true
+
+- name: Set local-path as the default StorageClass
+  kubernetes.core.k8s:
+    state: present
+    kind: StorageClass
+    name: local-path
+    definition:
+      metadata:
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "true"
+  run_once: true
