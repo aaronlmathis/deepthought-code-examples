@@ -1,16 +1,55 @@
-- hosts: all
-  become: true
+---
+- name: Pre-flight checks
+  hosts: all
+  gather_facts: true
   roles:
-    - common
-    - containerd
-    - kubernetes
+    - { role: preflight, tags: ['preflight', 'validation'] }
 
-- hosts: masters
+- name: Common setup
+  hosts: all
   become: true
   roles:
-    - control-plane
+    - { role: common, tags: ['common', 'setup'] }
+    - { role: containerd, tags: ['containerd', 'container-runtime'] }
+    - { role: kubernetes, tags: ['kubernetes', 'k8s'] }
 
-- hosts: workers
+- name: Control plane setup
+  hosts: masters
   become: true
   roles:
-    - worker
+    - { role: control-plane, tags: ['control-plane', 'masters'] }
+
+- name: Worker nodes setup
+  hosts: workers
+  become: true
+  roles:
+    - { role: worker, tags: ['worker', 'nodes'] }
+
+- name: Infrastructure and applications
+  hosts: masters
+  become: true
+  vars:
+    kubeconfig_path: /home/ubuntu/.kube/config
+  environment:
+    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_path }}"
+    KUBECONFIG: "{{ kubeconfig_path }}"
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+  roles:
+    - { role: helm, tags: ['helm', 'tools'] }
+    - { role: metallb, tags: ['metallb', 'networking', 'load-balancer'] }
+    - { role: storage, tags: ['storage', 'persistent-storage'] }
+    - { role: istio, tags: ['istio', 'service-mesh'] }
+    #- { role: monitoring, tags: ['monitoring', 'observability'] }
+    #- { role: onlineboutique, tags: ['apps', 'online-boutique'] }
+
+- name: Validation and health checks
+  hosts: masters
+  become: true
+  vars:
+    kubeconfig_path: /home/ubuntu/.kube/config
+  environment:
+    K8S_AUTH_KUBECONFIG: "{{ kubeconfig_path }}"
+    KUBECONFIG: "{{ kubeconfig_path }}"
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+  roles:
+    - { role: validation, tags: ['validation', 'health-check'] }
