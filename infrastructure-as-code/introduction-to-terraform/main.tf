@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "libvirt" {
-  uri = "qemu:///system"
+  uri = "qemu+ssh://amathis@192.168.0.40/system"
 }
 
 # Create cloud-init ISO per VM
