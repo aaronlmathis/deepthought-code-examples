@@ -32,7 +32,8 @@ jobs:
     needs: validate
     if: github.event_name == 'pull_request'
     runs-on: [self-hosted, homelab]
-
+    env: 
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: 'Setup SSH Key'
