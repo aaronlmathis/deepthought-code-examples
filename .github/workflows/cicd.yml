@@ -36,6 +36,13 @@ jobs:
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+
+      # Add this new step
+      - name: 'Setup Terraform Credentials'
+        run: |
+          mkdir -p ~/.terraform.d
+          echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
+
       - name: 'Setup SSH Key'
         uses: webfactory/ssh-agent@v0.9.0
         with:
