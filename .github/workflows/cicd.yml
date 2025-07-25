@@ -82,12 +82,21 @@ jobs:
         run: terraform init -input=false
         working-directory: ./infrastructure-as-code/introduction-to-terraform
 
-      - name: 'Run Terraform Plan and Comment'
-        uses: cds-snc/terraform-plan@v1
-        with:
-          directory: './infrastructure-as-code/introduction-to-terraform'
-          comment-title: 'Homelab Infrastructure Plan'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: 'Debug and Run Terraform Plan'
+        id: plan
+        working-directory: ./infrastructure-as-code/introduction-to-terraform
+        run: |
+          echo "--- Verifying Environment ---"
+          echo "User: $(whoami)"
+          echo "HOME: ${HOME}"
+          echo "--- Contents of ~/.ssh/config ---"
+          cat ~/.ssh/config || echo "No ~/.ssh/config file found."
+          echo "--- SSH Agent Status ---"
+          env | grep SSH_
+          ssh-add -l
+          echo "--- Running Terraform Plan with Debug Logging ---"
+          export TF_LOG=DEBUG
+          terraform plan -no-color -input=false -out=plan.tfplan
 
   deploy:
     name: 'Deploy to Homelab'
