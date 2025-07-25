@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "libvirt" {
-  uri = "qemu+ssh://amathis@192.168.0.40/system"
+  uri = "qemu+ssh://amathis@192.168.0.40:42/system?keyfile=/home/ubuntu/.ssh/id_rsa"
 }
 #Test
 
