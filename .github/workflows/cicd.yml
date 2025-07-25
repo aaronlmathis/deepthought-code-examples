@@ -12,6 +12,7 @@ on:
 
 env:
   TF_VERSION: "1.12.2"
+  NODE_VERSION: "20"
   WORKING_DIR: "./infrastructure-as-code"
 
 jobs:
@@ -21,6 +22,11 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
+
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v3
@@ -53,6 +59,11 @@ jobs:
       - name: 'Checkout'
         uses: actions/checkout@v4
 
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v3
         with:
@@ -80,28 +91,57 @@ jobs:
           }
           echo "✅ Terraform Cloud is reachable"
 
+      - name: 'Debug Environment'
+        run: |
+          echo "🔍 Environment Debug Information:"
+          echo "Node.js version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Terraform version: $(terraform --version)"
+          echo "Working directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la ${{ env.WORKING_DIR }}
+          echo "Makefile contents:"
+          cat ${{ env.WORKING_DIR }}/Makefile
+
       - name: 'Run Make Plan'
         id: plan
         run: |
           cd ${{ env.WORKING_DIR }}
+          echo "🏗️ Running make plan..."
           make plan 2>&1 | tee plan_output.txt
+          
+          # Capture the exit code
+          PLAN_EXIT_CODE=${PIPESTATUS[0]}
+          echo "plan_exit_code=$PLAN_EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Capture the output
           echo "plan_output<<EOF" >> $GITHUB_OUTPUT
           cat plan_output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Exit with the original exit code
+          exit $PLAN_EXIT_CODE
         continue-on-error: true
 
       - name: 'Comment Plan Results'
         uses: actions/github-script@v7
+        if: always()
         with:
           script: |
+            const planExitCode = '${{ steps.plan.outputs.plan_exit_code }}';
+            const planOutput = `${{ steps.plan.outputs.plan_output }}`;
+            const status = planExitCode === '0' ? '✅ Success' : '❌ Failed';
+            
             const output = `
-            ## 🏗️ Terraform Plan Results
+            ## 🏗️ Terraform Plan Results ${status}
+            
+            **Exit Code**: \`${planExitCode}\`
             
             <details>
-            <summary>📋 Plan Output</summary>
+            <summary>📋 Plan Output (Click to expand)</summary>
             
             \`\`\`
-            ${{ steps.plan.outputs.plan_output }}
+            ${planOutput}
             \`\`\`
             
             </details>
@@ -109,6 +149,7 @@ jobs:
             **Workflow**: \`${{ github.workflow }}\`
             **Action**: \`${{ github.event_name }}\`
             **Commit**: \`${{ github.sha }}\`
+            **Runner**: \`self-hosted\`
             `;
             
             github.rest.issues.createComment({
@@ -119,9 +160,9 @@ jobs:
             })
 
       - name: 'Fail if Plan Failed'
-        if: steps.plan.outcome == 'failure'
+        if: steps.plan.outputs.plan_exit_code != '0'
         run: |
-          echo "❌ Terraform plan failed!"
+          echo "❌ Terraform plan failed with exit code: ${{ steps.plan.outputs.plan_exit_code }}"
           exit 1
 
   deploy:
@@ -133,6 +174,11 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
+
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v3
@@ -172,11 +218,21 @@ jobs:
           cd ${{ env.WORKING_DIR }}
           echo "🚀 Starting infrastructure deployment..."
           make deploy 2>&1 | tee deploy_output.txt
+          
+          # Capture the exit code
+          DEPLOY_EXIT_CODE=${PIPESTATUS[0]}
+          echo "deploy_exit_code=$DEPLOY_EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Capture the output
           echo "deploy_output<<EOF" >> $GITHUB_OUTPUT
           cat deploy_output.txt >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Exit with the original exit code
+          exit $DEPLOY_EXIT_CODE
 
       - name: 'Create Deployment Summary'
+        if: steps.deploy.outputs.deploy_exit_code == '0'
         run: |
           echo "# 🎉 Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -184,6 +240,11 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           cd ${{ env.WORKING_DIR }}/introduction-to-terraform
           terraform output 2>/dev/null || echo "No outputs available"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Logs" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.deploy.outputs.deploy_output }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: 'Upload Deployment Logs'
@@ -203,6 +264,11 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
+
+      - name: 'Setup Node.js'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v3
