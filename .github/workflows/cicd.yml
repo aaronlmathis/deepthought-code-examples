@@ -70,17 +70,51 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
-      - name: 'Configure SSH for Libvirt'
+      - name: 'Setup SSH Key for Libvirt'
         run: |
+          # Create SSH directory
           mkdir -p ~/.ssh
-          echo "Host 192.168.0.40" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          chmod 700 ~/.ssh
+          
+          # Add SSH private key
+          echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Create SSH config for libvirt host
+          cat > ~/.ssh/config << EOF
+          Host 192.168.0.40
+            HostName 192.168.0.40
+            User amathis
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
+          EOF
+          chmod 600 ~/.ssh/config
+          
+          # Test SSH connection
+          echo "Testing SSH connection to libvirt host..."
+          ssh -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" || {
+            echo "❌ SSH connection failed"
+            echo "Debug: Testing with verbose output..."
+            ssh -v 192.168.0.40 "echo 'test'" || true
+            exit 1
+          }
 
-      - name: 'Setup SSH Key for Ansible'
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+      - name: 'Start SSH Agent and Add Key'
+        run: |
+          # Start SSH agent
+          eval $(ssh-agent -s)
+          
+          # Add SSH key to agent
+          ssh-add ~/.ssh/id_rsa
+          
+          # List loaded keys
+          ssh-add -l
+          
+          # Export SSH_AUTH_SOCK for subsequent steps
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
 
       - name: 'Test Terraform Cloud Connectivity'
         run: |
@@ -98,16 +132,32 @@ jobs:
           echo "NPM version: $(npm --version)"
           echo "Terraform version: $(terraform --version)"
           echo "Working directory: $(pwd)"
+          echo "SSH Agent: $SSH_AUTH_SOCK"
+          echo "SSH keys loaded:"
+          ssh-add -l || echo "No keys in agent"
           echo "Directory contents:"
           ls -la ${{ env.WORKING_DIR }}
-          echo "Makefile contents:"
-          cat ${{ env.WORKING_DIR }}/Makefile
+          echo "SSH config:"
+          cat ~/.ssh/config
+          echo "Testing libvirt connection again:"
+          ssh 192.168.0.40 "uname -a" || echo "SSH test failed"
 
       - name: 'Run Make Plan'
         id: plan
+        env:
+          SSH_AUTH_SOCK: ${{ env.SSH_AUTH_SOCK }}
         run: |
           cd ${{ env.WORKING_DIR }}
           echo "🏗️ Running make plan..."
+          
+          # Ensure SSH agent is available
+          ssh-add -l || {
+            echo "SSH agent not available, restarting..."
+            eval $(ssh-agent -s)
+            ssh-add ~/.ssh/id_rsa
+          }
+          
+          # Run the plan
           make plan 2>&1 | tee plan_output.txt
           
           # Capture the exit code
@@ -159,6 +209,14 @@ jobs:
               body: output
             })
 
+      - name: 'Cleanup SSH'
+        if: always()
+        run: |
+          # Kill SSH agent
+          kill $SSH_AGENT_PID || true
+          # Remove SSH key
+          rm -f ~/.ssh/id_rsa
+
       - name: 'Fail if Plan Failed'
         if: steps.plan.outputs.plan_exit_code != '0'
         run: |
@@ -191,17 +249,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ansible python3-kubernetes
 
-      - name: 'Configure SSH for Libvirt'
+      - name: 'Setup SSH Key for Libvirt'
         run: |
+          # Create SSH directory
           mkdir -p ~/.ssh
-          echo "Host 192.168.0.40" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-
-      - name: 'Setup SSH Key for Ansible'
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+          chmod 700 ~/.ssh
+          
+          # Add SSH private key
+          echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Create SSH config
+          cat > ~/.ssh/config << EOF
+          Host 192.168.0.40
+            HostName 192.168.0.40
+            User amathis
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
+          EOF
+          chmod 600 ~/.ssh/config
+          
+          # Start SSH agent and add key
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/id_rsa
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
 
       - name: 'Test Terraform Cloud Connectivity'
         run: |
@@ -214,6 +288,8 @@ jobs:
 
       - name: 'Deploy Infrastructure'
         id: deploy
+        env:
+          SSH_AUTH_SOCK: ${{ env.SSH_AUTH_SOCK }}
         run: |
           cd ${{ env.WORKING_DIR }}
           echo "🚀 Starting infrastructure deployment..."
@@ -241,11 +317,12 @@ jobs:
           cd ${{ env.WORKING_DIR }}/introduction-to-terraform
           terraform output 2>/dev/null || echo "No outputs available"
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Deployment Logs" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.deploy.outputs.deploy_output }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: 'Cleanup SSH'
+        if: always()
+        run: |
+          kill $SSH_AGENT_PID || true
+          rm -f ~/.ssh/id_rsa
 
       - name: 'Upload Deployment Logs'
         if: always()
@@ -276,17 +353,21 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
-      - name: 'Configure SSH for Libvirt'
+      - name: 'Setup SSH Key for Libvirt'
         run: |
           mkdir -p ~/.ssh
-          echo "Host 192.168.0.40" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-
-      - name: 'Setup SSH Key'
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+          chmod 700 ~/.ssh
+          echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          cat > ~/.ssh/config << EOF
+          Host 192.168.0.40
+            HostName 192.168.0.40
+            User amathis
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: 'Emergency Cleanup'
         run: |
