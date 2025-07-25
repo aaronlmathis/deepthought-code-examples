@@ -66,6 +66,13 @@ jobs:
           mkdir -p ~/.terraform.d
           echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
 
+      - name: 'Configure SSH for Libvirt'
+        run: |
+          mkdir -p ~/.ssh
+          echo "Host 192.168.0.40" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+
       - name: 'Setup SSH Key'
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -108,6 +115,13 @@ jobs:
         run: |
           mkdir -p ~/.terraform.d
           echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
+
+      - name: 'Configure SSH for Libvirt'
+        run: |
+          mkdir -p ~/.ssh
+          echo "Host 192.168.0.40" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
 
       - name: 'Setup SSH Key'
         uses: webfactory/ssh-agent@v0.9.0
