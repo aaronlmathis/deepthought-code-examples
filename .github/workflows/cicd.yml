@@ -47,6 +47,10 @@ jobs:
       pull-requests: write
     env: 
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+      # If your runner is behind a proxy, uncomment and set these variables
+      # HTTP_PROXY: "http://your.proxy.server:port"
+      # HTTPS_PROXY: "http://your.proxy.server:port"
+      # NO_PROXY: "localhost,127.0.0.1,192.168.0.40" # Add your libvirt host here
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -78,25 +82,21 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
 
+      - name: 'Diagnose Network Connectivity to Terraform Cloud'
+        run: |
+          echo "Attempting to connect to app.terraform.io..."
+          curl -v https://app.terraform.io/
+
       - name: 'Terraform Init'
         run: terraform init -input=false
         working-directory: ./infrastructure-as-code/introduction-to-terraform
 
-      - name: 'Debug and Run Terraform Plan'
-        id: plan
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
-        run: |
-          echo "--- Verifying Environment ---"
-          echo "User: $(whoami)"
-          echo "HOME: ${HOME}"
-          echo "--- Contents of ~/.ssh/config ---"
-          cat ~/.ssh/config || echo "No ~/.ssh/config file found."
-          echo "--- SSH Agent Status ---"
-          env | grep SSH_
-          ssh-add -l
-          echo "--- Running Terraform Plan with Debug Logging ---"
-          export TF_LOG=DEBUG
-          terraform plan -no-color -input=false -out=plan.tfplan
+      - name: 'Run Terraform Plan and Comment'
+        uses: cds-snc/terraform-plan@v1
+        with:
+          directory: './infrastructure-as-code/introduction-to-terraform'
+          comment-title: 'Homelab Infrastructure Plan'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
     name: 'Deploy to Homelab'
@@ -106,6 +106,10 @@ jobs:
 
     env:
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+      # If your runner is behind a proxy, uncomment and set these variables
+      # HTTP_PROXY: "http://your.proxy.server:port"
+      # HTTPS_PROXY: "http://your.proxy.server:port"
+      # NO_PROXY: "localhost,127.0.0.1,192.168.0.40" # Add your libvirt host here
 
     steps:
       - uses: actions/checkout@v4
@@ -136,6 +140,11 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+
+      - name: 'Diagnose Network Connectivity to Terraform Cloud'
+        run: |
+          echo "Attempting to connect to app.terraform.io..."
+          curl -v https://app.terraform.io/
 
       - name: 'Terraform Init'
         run: terraform init -input=false
