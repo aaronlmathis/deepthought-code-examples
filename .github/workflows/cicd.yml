@@ -32,12 +32,14 @@ jobs:
     needs: validate
     if: github.event_name == 'pull_request_target'
     runs-on: [self-hosted, homelab]
+    permissions:
+      pull-requests: write
     env: 
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      # Add this new step
       - name: 'Setup Terraform Credentials'
         run: |
           mkdir -p ~/.terraform.d
@@ -47,9 +49,11 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
-      - name: 'Run Terraform Plan'
-        run: make plan
-        working-directory: ./infrastructure-as-code
+      - name: 'Run Terraform Plan and Comment'
+        uses: cds-snc/terraform-plan@v1
+        with:
+          directory: './infrastructure-as-code'
+          comment-title: 'Homelab Infrastructure Plan'
 
   deploy:
     name: 'Deploy to Homelab'
