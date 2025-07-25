@@ -15,12 +15,23 @@ jobs:
   validate:
     name: 'Lint and Validate'
     runs-on: ubuntu-latest
+    env:
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: 'Setup Terraform' 
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.12.2
+
+      - name: 'Setup Terraform Credentials'
+        run: |
+          mkdir -p ~/.terraform.d
+          echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
+
+      - name: 'Terraform Init'
+        run: terraform init -input=false
+        working-directory: ./infrastructure-as-code/introduction-to-terraform
 
       - run: terraform fmt -check -recursive
         working-directory: ./infrastructure-as-code/introduction-to-terraform
