@@ -76,14 +76,12 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           
-          # Add SSH private key
+          # Add SSH private key (used for both Terraform and Ansible)
           echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Verify key format
-          echo "🔍 Checking SSH key format..."
-          head -1 ~/.ssh/id_rsa
-          tail -1 ~/.ssh/id_rsa
+          # Generate public key from private key
+          ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
           
           # Create SSH config for libvirt host
           cat > ~/.ssh/config << EOF
@@ -94,34 +92,27 @@ jobs:
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            LogLevel DEBUG1
-            ConnectTimeout 10
-            ServerAliveInterval 60
+            LogLevel ERROR
+          
+          Host master-* worker-* *.local
+            User ubuntu
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
           EOF
           chmod 600 ~/.ssh/config
           
-          # Debug network connectivity first
-          echo "🔍 Testing network connectivity..."
-          nc -zv 192.168.0.40 42 || {
-            echo "❌ Cannot reach 192.168.0.40:42 - network issue"
-            exit 1
-          }
-          
-          # Test SSH connection with detailed debugging
-          echo "🔍 Testing SSH connection to libvirt host..."
-          ssh -vvv -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" 2>&1 || {
+          # Test SSH connection to libvirt host
+          echo "Testing SSH connection to libvirt host..."
+          ssh -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" || {
             echo "❌ SSH connection failed"
-            echo "🔍 SSH Debug Information:"
-            echo "Key fingerprint:"
-            ssh-keygen -lf ~/.ssh/id_rsa || echo "Invalid key format"
-            echo "SSH config:"
-            cat ~/.ssh/config
-            echo "Testing with different SSH options..."
-            ssh -o PasswordAuthentication=no -o PubkeyAuthentication=yes -o PreferredAuthentications=publickey -vvv 192.168.0.40 "echo 'test'" 2>&1 || true
+            echo "Debug: Testing with verbose output..."
+            ssh -vvv 192.168.0.40 "echo 'test'" 2>&1 | tail -20
             exit 1
           }
           
-          echo "✅ SSH connection successful"
+          echo "✅ SSH connection to libvirt host successful"
 
       - name: 'Verify SSH Key Authorization'
         run: |
@@ -312,14 +303,12 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           
-          # Add SSH private key
+          # Add SSH private key (used for both Terraform and Ansible)
           echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Verify key format
-          echo "🔍 Checking SSH key format..."
-          head -1 ~/.ssh/id_rsa
-          tail -1 ~/.ssh/id_rsa
+          # Generate public key from private key
+          ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
           
           # Create SSH config for libvirt host
           cat > ~/.ssh/config << EOF
@@ -330,34 +319,27 @@ jobs:
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            LogLevel DEBUG1
-            ConnectTimeout 10
-            ServerAliveInterval 60
+            LogLevel ERROR
+          
+          Host master-* worker-* *.local
+            User ubuntu
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
           EOF
           chmod 600 ~/.ssh/config
           
-          # Debug network connectivity first
-          echo "🔍 Testing network connectivity..."
-          nc -zv 192.168.0.40 42 || {
-            echo "❌ Cannot reach 192.168.0.40:42 - network issue"
-            exit 1
-          }
-          
-          # Test SSH connection with detailed debugging
-          echo "🔍 Testing SSH connection to libvirt host..."
-          ssh -vvv -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" 2>&1 || {
+          # Test SSH connection to libvirt host
+          echo "Testing SSH connection to libvirt host..."
+          ssh -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" || {
             echo "❌ SSH connection failed"
-            echo "🔍 SSH Debug Information:"
-            echo "Key fingerprint:"
-            ssh-keygen -lf ~/.ssh/id_rsa || echo "Invalid key format"
-            echo "SSH config:"
-            cat ~/.ssh/config
-            echo "Testing with different SSH options..."
-            ssh -o PasswordAuthentication=no -o PubkeyAuthentication=yes -o PreferredAuthentications=publickey -vvv 192.168.0.40 "echo 'test'" 2>&1 || true
+            echo "Debug: Testing with verbose output..."
+            ssh -vvv 192.168.0.40 "echo 'test'" 2>&1 | tail -20
             exit 1
           }
           
-          echo "✅ SSH connection successful"
+          echo "✅ SSH connection to libvirt host successful"
 
       - name: 'Verify SSH Key Authorization'
         run: |
@@ -467,13 +449,16 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           
-          # Add SSH private key
+          # Add SSH private key (used for both Terraform and Ansible)
           echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Create SSH config
+          # Generate public key from private key
+          ssh-keygen -y -f ~/.ssh/id_rsa > ~/.ssh/id_rsa.pub
+          
+          # Create SSH config for libvirt host
           cat > ~/.ssh/config << EOF
-          Host 192.168.0.40
+          Host 192.168.0.40 libvirt-host
             HostName 192.168.0.40
             Port 42
             User amathis
@@ -481,14 +466,26 @@ jobs:
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
             LogLevel ERROR
+          
+          Host master-* worker-* *.local
+            User ubuntu
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
           EOF
           chmod 600 ~/.ssh/config
           
-          # Start SSH agent and add key
-          eval $(ssh-agent -s)
-          ssh-add ~/.ssh/id_rsa
-          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
-          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+          # Test SSH connection to libvirt host
+          echo "Testing SSH connection to libvirt host..."
+          ssh -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" || {
+            echo "❌ SSH connection failed"
+            echo "Debug: Testing with verbose output..."
+            ssh -vvv 192.168.0.40 "echo 'test'" 2>&1 | tail -20
+            exit 1
+          }
+          
+          echo "✅ SSH connection to libvirt host successful"
 
       - name: 'Test Terraform Cloud Connectivity'
         run: |
