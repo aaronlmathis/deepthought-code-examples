@@ -23,9 +23,9 @@ jobs:
           terraform_version: 1.12.2
 
       - run: terraform fmt -check -recursive
-        working-directory: ./infrastructure-as-code
+        working-directory: ./infrastructure-as-code/introduction-to-terraform
       - run: terraform validate
-        working-directory: ./infrastructure-as-code
+        working-directory: ./infrastructure-as-code/introduction-to-terraform
 
   plan:
     name: 'Terraform Plan'
@@ -52,7 +52,7 @@ jobs:
       - name: 'Run Terraform Plan and Comment'
         uses: cds-snc/terraform-plan@v1
         with:
-          directory: './infrastructure-as-code'
+          directory: './infrastructure-as-code/introduction-to-terraform'
           comment-title: 'Homelab Infrastructure Plan'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,4 +78,4 @@ jobs:
           ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
       - name: 'Run Makefile to Deploy'
         run: make all
-        working-directory: ./infrastructure-as-code
+        working-directory: ./infrastructure-as-code/introduction-to-terraform

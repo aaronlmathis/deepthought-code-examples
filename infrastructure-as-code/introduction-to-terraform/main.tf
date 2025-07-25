@@ -11,7 +11,7 @@ provider "libvirt" {
   uri = "qemu+ssh://amathis@192.168.0.40/system"
 }
 #Test
-#Test
+
 # Create cloud-init ISO per VM
 resource "libvirt_cloudinit_disk" "cloudinit" {
   for_each = local.nodes
