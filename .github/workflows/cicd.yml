@@ -1,74 +1,214 @@
-name: 'Homelab IaC Pipeline'
+name: 'Homelab Infrastructure Pipeline'
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'infrastructure-as-code/**'
-
   pull_request:
     branches: [ main ]
     paths:
       - 'infrastructure-as-code/**'
 
-jobs: 
+env:
+  TF_VERSION: "1.12.2"
+  WORKING_DIR: "./infrastructure-as-code"
+
+jobs:
   validate:
-    name: 'Lint and Validate'
+    name: 'Validate Terraform'
     runs-on: ubuntu-latest
-    env:
-      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - name: 'Setup Terraform' 
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.12.2
-
-      - name: 'Setup Terraform Credentials'
-        run: |
-          mkdir -p ~/.terraform.d
-          echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
-
-      - name: 'Terraform Init'
-        run: terraform init -input=false
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
-
-      - run: terraform fmt -check -recursive
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
-      - run: terraform validate
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
-
-  plan:
-    name: 'Terraform Plan'
-    needs: validate
-    if: github.event_name == 'pull_request'
-    runs-on: [self-hosted, homelab]
-    permissions:
-      pull-requests: write
-    env: 
-      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-      # If your runner is behind a proxy, uncomment and set these variables
-      # HTTP_PROXY: "http://your.proxy.server:port"
-      # HTTPS_PROXY: "http://your.proxy.server:port"
-      # NO_PROXY: "localhost,127.0.0.1,192.168.0.40" # Add your libvirt host here
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 'Setup Node.js'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: 'Checkout'
+        uses: actions/checkout@v4
 
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.12.2
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
-      - name: 'Setup Terraform Credentials'
+      - name: 'Terraform Format Check'
+        run: terraform fmt -check -recursive
+        working-directory: ${{ env.WORKING_DIR }}/introduction-to-terraform
+
+      - name: 'Terraform Init'
+        run: terraform init -input=false
+        working-directory: ${{ env.WORKING_DIR }}/introduction-to-terraform
+
+      - name: 'Terraform Validate'
+        run: terraform validate
+        working-directory: ${{ env.WORKING_DIR }}/introduction-to-terraform
+
+  plan:
+    name: 'Terraform Plan'
+    needs: validate
+    runs-on: [self-hosted, homelab]
+    permissions:
+      contents: read
+      pull-requests: write
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Terraform'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: 'Configure SSH for Libvirt'
         run: |
-          mkdir -p ~/.terraform.d
-          echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
+          mkdir -p ~/.ssh
+          echo "Host 192.168.0.40" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+
+      - name: 'Setup SSH Key for Ansible'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+
+      - name: 'Test Terraform Cloud Connectivity'
+        run: |
+          echo "Testing connection to Terraform Cloud..."
+          curl -f https://app.terraform.io/api/v2/ping || {
+            echo "❌ Cannot reach Terraform Cloud"
+            exit 1
+          }
+          echo "✅ Terraform Cloud is reachable"
+
+      - name: 'Run Make Plan'
+        id: plan
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          make plan 2>&1 | tee plan_output.txt
+          echo "plan_output<<EOF" >> $GITHUB_OUTPUT
+          cat plan_output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: 'Comment Plan Results'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `
+            ## 🏗️ Terraform Plan Results
+            
+            <details>
+            <summary>📋 Plan Output</summary>
+            
+            \`\`\`
+            ${{ steps.plan.outputs.plan_output }}
+            \`\`\`
+            
+            </details>
+            
+            **Workflow**: \`${{ github.workflow }}\`
+            **Action**: \`${{ github.event_name }}\`
+            **Commit**: \`${{ github.sha }}\`
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: 'Fail if Plan Failed'
+        if: steps.plan.outcome == 'failure'
+        run: |
+          echo "❌ Terraform plan failed!"
+          exit 1
+
+  deploy:
+    name: 'Deploy Infrastructure'
+    needs: validate
+    runs-on: [self-hosted, homelab]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Terraform'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: 'Setup Ansible'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible python3-kubernetes
+
+      - name: 'Configure SSH for Libvirt'
+        run: |
+          mkdir -p ~/.ssh
+          echo "Host 192.168.0.40" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+
+      - name: 'Setup SSH Key for Ansible'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
+
+      - name: 'Test Terraform Cloud Connectivity'
+        run: |
+          echo "Testing connection to Terraform Cloud..."
+          curl -f https://app.terraform.io/api/v2/ping || {
+            echo "❌ Cannot reach Terraform Cloud"
+            exit 1
+          }
+          echo "✅ Terraform Cloud is reachable"
+
+      - name: 'Deploy Infrastructure'
+        id: deploy
+        run: |
+          cd ${{ env.WORKING_DIR }}
+          echo "🚀 Starting infrastructure deployment..."
+          make deploy 2>&1 | tee deploy_output.txt
+          echo "deploy_output<<EOF" >> $GITHUB_OUTPUT
+          cat deploy_output.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 'Create Deployment Summary'
+        run: |
+          echo "# 🎉 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Infrastructure Status" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cd ${{ env.WORKING_DIR }}/introduction-to-terraform
+          terraform output 2>/dev/null || echo "No outputs available"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: 'Upload Deployment Logs'
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-logs
+          path: ${{ env.WORKING_DIR }}/deploy_output.txt
+          retention-days: 30
+
+  cleanup:
+    name: 'Cleanup on Failure'
+    needs: [deploy]
+    runs-on: [self-hosted, homelab]
+    if: failure() && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+
+      - name: 'Setup Terraform'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: 'Configure SSH for Libvirt'
         run: |
@@ -82,74 +222,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
 
-      - name: 'Diagnose Network Connectivity to Terraform Cloud'
+      - name: 'Emergency Cleanup'
         run: |
-          echo "Attempting to connect to app.terraform.io..."
-          curl -v https://app.terraform.io/
-
-      - name: 'Terraform Init'
-        run: terraform init -input=false
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
-
-      - name: 'Run Terraform Plan and Comment'
-        uses: cds-snc/terraform-plan@v1
-        with:
-          directory: './infrastructure-as-code/introduction-to-terraform'
-          comment-title: 'Homelab Infrastructure Plan'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-  deploy:
-    name: 'Deploy to Homelab'
-    needs: validate
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: [self-hosted, homelab]
-
-    env:
-      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-      # If your runner is behind a proxy, uncomment and set these variables
-      # HTTP_PROXY: "http://your.proxy.server:port"
-      # HTTPS_PROXY: "http://your.proxy.server:port"
-      # NO_PROXY: "localhost,127.0.0.1,192.168.0.40" # Add your libvirt host here
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 'Setup Node.js'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 'Setup Terraform'
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.12.2
-
-      - name: 'Setup Terraform Credentials'
-        run: |
-          mkdir -p ~/.terraform.d
-          echo '{"credentials":{"app.terraform.io":{"token":"${{ secrets.TF_API_TOKEN }}"}}}' > ~/.terraform.d/credentials.tfrc.json
-
-      - name: 'Configure SSH for Libvirt' 
-        run: |
-          mkdir -p ~/.ssh
-          echo "Host 192.168.0.40" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-
-      - name: 'Setup SSH Key'
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}
-
-      - name: 'Diagnose Network Connectivity to Terraform Cloud'
-        run: |
-          echo "Attempting to connect to app.terraform.io..."
-          curl -v https://app.terraform.io/
-
-      - name: 'Terraform Init'
-        run: terraform init -input=false
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
-
-      - name: 'Run Makefile to Deploy'
-        run: make all
-        working-directory: ./infrastructure-as-code/introduction-to-terraform
+          cd ${{ env.WORKING_DIR }}
+          echo "🧹 Running emergency cleanup..."
+          make clean-ssh || true
+          echo "Cleanup completed"
