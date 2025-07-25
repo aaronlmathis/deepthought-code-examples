@@ -477,8 +477,8 @@ jobs:
             LogLevel ERROR
           EOF
           chmod 600 ~/.ssh/config
-          
-          # Test SSH connection to libvirt host
+           
+          # Test SSH connection to libvirt host 
           echo "Testing SSH connection to libvirt host..."
           ssh -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" || {
             echo "❌ SSH connection failed"
