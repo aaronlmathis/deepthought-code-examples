@@ -80,26 +80,83 @@ jobs:
           echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
+          # Verify key format
+          echo "🔍 Checking SSH key format..."
+          head -1 ~/.ssh/id_rsa
+          tail -1 ~/.ssh/id_rsa
+          
           # Create SSH config for libvirt host
           cat > ~/.ssh/config << EOF
-          Host 192.168.0.40
+          Host 192.168.0.40 libvirt-host
             HostName 192.168.0.40
+            Port 42
             User amathis
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            LogLevel ERROR
+            LogLevel DEBUG1
+            ConnectTimeout 10
+            ServerAliveInterval 60
           EOF
           chmod 600 ~/.ssh/config
           
-          # Test SSH connection
-          echo "Testing SSH connection to libvirt host..."
-          ssh -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" || {
-            echo "❌ SSH connection failed"
-            echo "Debug: Testing with verbose output..."
-            ssh -v 192.168.0.40 "echo 'test'" || true
+          # Debug network connectivity first
+          echo "🔍 Testing network connectivity..."
+          nc -zv 192.168.0.40 42 || {
+            echo "❌ Cannot reach 192.168.0.40:42 - network issue"
             exit 1
           }
+          
+          # Test SSH connection with detailed debugging
+          echo "🔍 Testing SSH connection to libvirt host..."
+          ssh -vvv -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" 2>&1 || {
+            echo "❌ SSH connection failed"
+            echo "🔍 SSH Debug Information:"
+            echo "Key fingerprint:"
+            ssh-keygen -lf ~/.ssh/id_rsa || echo "Invalid key format"
+            echo "SSH config:"
+            cat ~/.ssh/config
+            echo "Testing with different SSH options..."
+            ssh -o PasswordAuthentication=no -o PubkeyAuthentication=yes -o PreferredAuthentications=publickey -vvv 192.168.0.40 "echo 'test'" 2>&1 || true
+            exit 1
+          }
+          
+          echo "✅ SSH connection successful"
+
+      - name: 'Verify SSH Key Authorization'
+        run: |
+          echo "🔍 Verifying SSH key is authorized on target host..."
+          ssh 192.168.0.40 "cat ~/.ssh/authorized_keys | grep -q '$(ssh-keygen -yf ~/.ssh/id_rsa | cut -d' ' -f2)'" || {
+            echo "❌ SSH key not found in authorized_keys"
+            echo "Your public key:"
+            ssh-keygen -yf ~/.ssh/id_rsa
+            echo "Authorized keys on target:"
+            ssh 192.168.0.40 "cat ~/.ssh/authorized_keys" 2>/dev/null || echo "Cannot read authorized_keys"
+            exit 1
+          }
+          echo "✅ SSH key is properly authorized"
+
+      - name: 'Test Libvirt Access'
+        run: |
+          echo "🔍 Testing libvirt access..."
+          ssh 192.168.0.40 "id" || {
+            echo "❌ Cannot get user info"
+            exit 1
+          }
+          
+          ssh 192.168.0.40 "groups" || {
+            echo "❌ Cannot get group info"
+            exit 1
+          }
+          
+          ssh 192.168.0.40 "virsh version" || {
+            echo "❌ Cannot access libvirt - user may not be in libvirt group"
+            echo "User groups:"
+            ssh 192.168.0.40 "groups"
+            exit 1
+          }
+          
+          echo "✅ Libvirt access confirmed"
 
       - name: 'Start SSH Agent and Add Key'
         run: |
@@ -259,32 +316,83 @@ jobs:
           echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Create SSH config
+          # Verify key format
+          echo "🔍 Checking SSH key format..."
+          head -1 ~/.ssh/id_rsa
+          tail -1 ~/.ssh/id_rsa
+          
+          # Create SSH config for libvirt host
           cat > ~/.ssh/config << EOF
-          Host 192.168.0.40
+          Host 192.168.0.40 libvirt-host
             HostName 192.168.0.40
+            Port 42
             User amathis
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            LogLevel ERROR
+            LogLevel DEBUG1
+            ConnectTimeout 10
+            ServerAliveInterval 60
           EOF
           chmod 600 ~/.ssh/config
           
-          # Start SSH agent and add key
-          eval $(ssh-agent -s)
-          ssh-add ~/.ssh/id_rsa
-          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
-          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
-
-      - name: 'Test Terraform Cloud Connectivity'
-        run: |
-          echo "Testing connection to Terraform Cloud..."
-          curl -f https://app.terraform.io/api/v2/ping || {
-            echo "❌ Cannot reach Terraform Cloud"
+          # Debug network connectivity first
+          echo "🔍 Testing network connectivity..."
+          nc -zv 192.168.0.40 42 || {
+            echo "❌ Cannot reach 192.168.0.40:42 - network issue"
             exit 1
           }
-          echo "✅ Terraform Cloud is reachable"
+          
+          # Test SSH connection with detailed debugging
+          echo "🔍 Testing SSH connection to libvirt host..."
+          ssh -vvv -o ConnectTimeout=10 192.168.0.40 "echo 'SSH connection successful'" 2>&1 || {
+            echo "❌ SSH connection failed"
+            echo "🔍 SSH Debug Information:"
+            echo "Key fingerprint:"
+            ssh-keygen -lf ~/.ssh/id_rsa || echo "Invalid key format"
+            echo "SSH config:"
+            cat ~/.ssh/config
+            echo "Testing with different SSH options..."
+            ssh -o PasswordAuthentication=no -o PubkeyAuthentication=yes -o PreferredAuthentications=publickey -vvv 192.168.0.40 "echo 'test'" 2>&1 || true
+            exit 1
+          }
+          
+          echo "✅ SSH connection successful"
+
+      - name: 'Verify SSH Key Authorization'
+        run: |
+          echo "🔍 Verifying SSH key is authorized on target host..."
+          ssh 192.168.0.40 "cat ~/.ssh/authorized_keys | grep -q '$(ssh-keygen -yf ~/.ssh/id_rsa | cut -d' ' -f2)'" || {
+            echo "❌ SSH key not found in authorized_keys"
+            echo "Your public key:"
+            ssh-keygen -yf ~/.ssh/id_rsa
+            echo "Authorized keys on target:"
+            ssh 192.168.0.40 "cat ~/.ssh/authorized_keys" 2>/dev/null || echo "Cannot read authorized_keys"
+            exit 1
+          }
+          echo "✅ SSH key is properly authorized"
+
+      - name: 'Test Libvirt Access'
+        run: |
+          echo "🔍 Testing libvirt access..."
+          ssh 192.168.0.40 "id" || {
+            echo "❌ Cannot get user info"
+            exit 1
+          }
+          
+          ssh 192.168.0.40 "groups" || {
+            echo "❌ Cannot get group info"
+            exit 1
+          }
+          
+          ssh 192.168.0.40 "virsh version" || {
+            echo "❌ Cannot access libvirt - user may not be in libvirt group"
+            echo "User groups:"
+            ssh 192.168.0.40 "groups"
+            exit 1
+          }
+          
+          echo "✅ Libvirt access confirmed"
 
       - name: 'Deploy Infrastructure'
         id: deploy
@@ -355,19 +463,41 @@ jobs:
 
       - name: 'Setup SSH Key for Libvirt'
         run: |
+          # Create SSH directory
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          
+          # Add SSH private key
           echo "${{ secrets.LIBVIRT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          
+          # Create SSH config
           cat > ~/.ssh/config << EOF
           Host 192.168.0.40
             HostName 192.168.0.40
+            Port 42
             User amathis
             IdentityFile ~/.ssh/id_rsa
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
+            LogLevel ERROR
           EOF
           chmod 600 ~/.ssh/config
+          
+          # Start SSH agent and add key
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/id_rsa
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+
+      - name: 'Test Terraform Cloud Connectivity'
+        run: |
+          echo "Testing connection to Terraform Cloud..."
+          curl -f https://app.terraform.io/api/v2/ping || {
+            echo "❌ Cannot reach Terraform Cloud"
+            exit 1
+          }
+          echo "✅ Terraform Cloud is reachable"
 
       - name: 'Emergency Cleanup'
         run: |
