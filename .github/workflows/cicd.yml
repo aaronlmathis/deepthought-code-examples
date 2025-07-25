@@ -6,7 +6,7 @@ on:
     paths:
       - 'infrastructure-as-code/**'
 
-  pull_request_target:
+  pull_request:
     branches: [ main ]
     paths:
       - 'infrastructure-as-code/**'
@@ -30,7 +30,7 @@ jobs:
   plan:
     name: 'Terraform Plan'
     needs: validate
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request'
     runs-on: [self-hosted, homelab]
     permissions:
       pull-requests: write
