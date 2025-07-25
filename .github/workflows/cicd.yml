@@ -11,7 +11,7 @@ on:
     paths:
       - 'infrastructure-as-code/**'
 
-jobs:
+jobs: 
   validate:
     name: 'Lint and Validate'
     runs-on: ubuntu-latest
