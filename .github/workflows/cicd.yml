@@ -54,6 +54,7 @@ jobs:
         with:
           directory: './infrastructure-as-code'
           comment-title: 'Homelab Infrastructure Plan'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
     name: 'Deploy to Homelab'
