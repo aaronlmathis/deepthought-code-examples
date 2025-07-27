@@ -1,0 +1,16 @@
+name: Auto Destroy Dev Resources
+on:
+  schedule:
+    - cron: '0 2 * * *'  # daily at 02:00 UTC
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Delete resource groups tagged 'dev'
+        run: |
+          az group list --query "[?tags.environment=='dev'].name" -o tsv |
+          xargs -n1 -r az group delete --name {} --yes --no-wait

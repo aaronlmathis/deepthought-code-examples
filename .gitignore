@@ -6,3 +6,4 @@ building-image-classifier/cifar-10/
 *.safetensor
 terraform.tfstate
 *.terraform*
+.env
