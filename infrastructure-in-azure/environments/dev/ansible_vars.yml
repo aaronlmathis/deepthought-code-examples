@@ -1,0 +1,23 @@
+# Development environment variables
+environment_name: "dev"
+ssh_port: 22
+fail2ban_maxretry: 5  # More lenient for dev
+fail2ban_bantime: 1800  # Shorter ban time for dev
+fail2ban_findtime: 300
+
+# System configuration
+timezone: "UTC"
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+# Cron configuration - less frequent for dev
+backup_schedule: "0 4 * * *"  # Daily at 4 AM
+log_rotation_schedule: "0 5 * * *"  # Daily at 5 AM
+
+# Azure Monitor configuration
+azure_monitor_enabled: true
+
+# Development specific settings
+debug_mode: true
+log_level: "debug"

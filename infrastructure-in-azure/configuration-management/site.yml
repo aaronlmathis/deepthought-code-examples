@@ -1,0 +1,70 @@
+---
+- name: Configure Azure VM for Production Deployment
+  hosts: azure_vms
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+  - name: Wait for cloud-init to finish
+    command: cloud-init status --wait
+    changed_when: false
+    failed_when: false        # skip on images without cloud-init
+
+  - name: Wait for dpkg / apt locks to clear (max 10 min)
+    shell: |
+      lsof /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock || true
+    register: lock_check
+    retries: 20               # 20 × 30 s = 10 min
+    delay: 30
+    until: lock_check.stdout == ""
+    changed_when: false
+
+  - name: Update package cache
+    ansible.builtin.apt:
+      update_cache: yes
+      cache_valid_time: 3600
+    retries: 5                # extra safety in case a timer kicks in
+    delay: 15
+    register: apt_cache
+    until: apt_cache is succeeded
+    tags: [system, updates]
+
+  roles:
+    - role: system-hardening
+      tags: [system, security, hardening]
+
+    - role: firewall
+      tags: [security, firewall]
+
+    - role: ssh-hardening
+      tags: [security, ssh]
+
+    - role: fail2ban
+      tags: [security, fail2ban]
+
+    - role: time-sync
+      tags: [system, time]
+
+    - role: azure-monitor
+      tags: [monitoring, azure]
+
+    - role: cron-jobs
+      tags: [system, cron, backup]
+
+  post_tasks:
+    - name: Verify all services are running
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - fail2ban
+        - chrony
+      tags: [verification]
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "Deployment completed successfully!"
+          - "SSH Port: {{ ssh_port | default('22') }}"
+      tags: [summary]

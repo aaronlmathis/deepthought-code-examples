@@ -1,0 +1,96 @@
+---
+- name: Add Microsoft GPG key
+  ansible.builtin.apt_key:
+    url: https://packages.microsoft.com/keys/microsoft.asc
+    state: present
+  when: azure_monitor_enabled | default(false)
+
+- name: Add Microsoft Azure CLI repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ {{ ansible_distribution_release }} main"
+    state: present
+    update_cache: true
+  when: azure_monitor_enabled | default(false)
+
+- name: Install Azure Monitor Agent (alternative method)
+  ansible.builtin.apt:
+    name:
+      - azure-cli
+    state: present
+    update_cache: true
+  when: azure_monitor_enabled | default(false)
+
+- name: Download Azure Monitor Agent installer script
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/microsoft/OMS-Agent-for-Linux/master/installer/scripts/onboard_agent.sh"
+    dest: /tmp/onboard_agent.sh
+    mode: '0755'
+  when: azure_monitor_enabled | default(false)
+  failed_when: false
+
+- name: Install Azure Monitor Agent via script (if available)
+  ansible.builtin.command: /tmp/onboard_agent.sh -w YOUR_WORKSPACE_ID -s YOUR_SHARED_KEY
+  when:
+    - azure_monitor_enabled | default(false)
+    - false  # Disabled until workspace credentials are provided
+  failed_when: false
+  changed_when: false
+
+- name: Install basic monitoring tools instead
+  ansible.builtin.apt:
+    name:
+      - sysstat
+      - iotop
+      - nethogs
+      - ncdu
+      - htop
+      - nmon
+    state: present
+
+- name: Configure sysstat
+  ansible.builtin.lineinfile:
+    path: /etc/default/sysstat
+    regexp: '^ENABLED='
+    line: 'ENABLED="true"'
+    backup: true
+  notify: Restart sysstat
+
+- name: Start and enable sysstat
+  ansible.builtin.systemd:
+    name: sysstat
+    state: started
+    enabled: true
+
+- name: Create basic monitoring script
+  ansible.builtin.copy:
+    dest: /usr/local/bin/system-monitor.sh
+    content: |
+      #!/bin/bash
+      # Basic system monitoring script
+      echo "=== System Monitor Report ==="
+      echo "Date: $(date)"
+      echo "Uptime: $(uptime)"
+      echo "Load Average: $(cat /proc/loadavg)"
+      echo "Memory Usage:"
+      free -h
+      echo "Disk Usage:"
+      df -h
+      echo "Top 5 CPU processes:"
+      ps aux --sort=-%cpu | head -6
+      echo "Top 5 Memory processes:"
+      ps aux --sort=-%mem | head -6
+    mode: '0755'
+
+- name: Schedule basic monitoring
+  ansible.builtin.cron:
+    name: "system monitor"
+    minute: "*/15"
+    job: "/usr/local/bin/system-monitor.sh >> /var/log/system-monitor.log 2>&1"
+
+- name: Clean up downloaded files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/azuremonitoragent.deb
+    - /tmp/onboard_agent.sh

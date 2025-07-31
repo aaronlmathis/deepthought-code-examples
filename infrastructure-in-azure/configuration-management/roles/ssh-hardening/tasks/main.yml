@@ -1,0 +1,63 @@
+---
+- name: Backup original SSH config
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.backup
+    remote_src: true
+    force: false
+    mode: '0600'
+
+- name: Configure SSH hardening
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: true
+  loop:
+    - { regexp: '^#?PermitRootLogin ', line: 'PermitRootLogin no' }
+    - { regexp: '^#?PasswordAuthentication ', line: 'PasswordAuthentication no' }
+    - { regexp: '^#?PubkeyAuthentication ', line: 'PubkeyAuthentication yes' }
+    - { regexp: '^#?AuthorizedKeysFile ', line: 'AuthorizedKeysFile .ssh/authorized_keys' }
+    - { regexp: '^#?PermitEmptyPasswords ', line: 'PermitEmptyPasswords no' }
+    - { regexp: '^#?ChallengeResponseAuthentication ', line: 'ChallengeResponseAuthentication no' }
+    - { regexp: '^#?UsePAM ', line: 'UsePAM yes' }
+    - { regexp: '^#?X11Forwarding ', line: 'X11Forwarding no' }
+    - { regexp: '^#?PrintMotd ', line: 'PrintMotd no' }
+    - { regexp: '^#?TCPKeepAlive ', line: 'TCPKeepAlive yes' }
+    - { regexp: '^#?ClientAliveInterval ', line: 'ClientAliveInterval 300' }
+    - { regexp: '^#?ClientAliveCountMax ', line: 'ClientAliveCountMax 2' }
+    - { regexp: '^#?MaxAuthTries ', line: 'MaxAuthTries 3' }
+    - { regexp: '^#?MaxSessions ', line: 'MaxSessions 2' }
+    - { regexp: '^#?Protocol ', line: 'Protocol 2' }
+    - { regexp: '^#?LogLevel ', line: 'LogLevel VERBOSE' }
+  notify: Restart ssh
+
+- name: Configure allowed users
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?AllowUsers '
+    line: 'AllowUsers {{ ssh_allowed_users | join(" ") }}'
+    backup: true
+  when: ssh_allowed_users is defined
+  notify: Restart ssh
+
+- name: Configure strong ciphers and MACs
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    block: |
+      # Strong Ciphers and MACs
+      Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+      MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha2-512
+      KexAlgorithms curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - SSH CRYPTO"
+    backup: true
+  notify: Restart ssh
+
+- name: Validate SSH configuration
+  ansible.builtin.command: sshd -t
+  changed_when: false
+
+- name: Ensure SSH service is enabled
+  ansible.builtin.systemd:
+    name: ssh
+    enabled: true

@@ -1,0 +1,104 @@
+---
+- name: Update all packages
+  ansible.builtin.apt:
+    upgrade: dist
+    update_cache: true
+    autoremove: true
+    autoclean: true
+  register: update_result
+  retries: 3
+  delay: 10
+
+- name: Install essential security packages
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+      - update-notifier-common
+      - curl
+      - wget
+      - vim
+      - htop
+      - ufw
+      - rsyslog
+      - logrotate
+    state: present
+
+- name: Configure automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    mode: '0644'
+    backup: true
+
+- name: Configure unattended upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    content: |
+      Unattended-Upgrade::Allowed-Origins {
+          "${distro_id}:${distro_codename}";
+          "${distro_id}:${distro_codename}-security";
+          "${distro_id}:${distro_codename}-updates";
+      };
+      Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+      Unattended-Upgrade::MinimalSteps "true";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+      Unattended-Upgrade::Automatic-Reboot "false";
+    mode: '0644'
+    backup: true
+
+- name: Set kernel parameters for security
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ kernel_parameters }}"
+  when: kernel_parameters is defined
+
+- name: Disable IPv6 if configured
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: 1
+    state: present
+    sysctl_set: true
+    reload: true
+  loop:
+    - net.ipv6.conf.all.disable_ipv6
+    - net.ipv6.conf.default.disable_ipv6
+    - net.ipv6.conf.lo.disable_ipv6
+  when: disable_ipv6 | default(false)
+
+- name: Remove unnecessary packages
+  ansible.builtin.apt:
+    name:
+      - telnet
+      - rsh-client
+      - rsh-redone-client
+    state: absent
+    autoremove: true
+
+- name: Ensure rsyslog is running
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: started
+    enabled: true
+
+- name: Configure log rotation
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/custom
+    content: |
+      /var/log/*.log {
+          daily
+          missingok
+          rotate 52
+          compress
+          delaycompress
+          notifempty
+          create 0644 root root
+      }
+    mode: '0644'

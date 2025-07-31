@@ -1,0 +1,38 @@
+---
+- name: Reset UFW to defaults
+  community.general.ufw:
+    state: reset
+  notify: Restart ufw
+
+- name: Set UFW default policies
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: 'incoming', policy: 'deny' }
+    - { direction: 'outgoing', policy: 'allow' }
+    - { direction: 'routed', policy: 'deny' }
+
+- name: Configure UFW rules
+  community.general.ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    src: "{{ item.src | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ firewall_rules }}"
+  notify: Restart ufw
+
+- name: Enable UFW logging
+  community.general.ufw:
+    logging: 'on'
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+- name: Ensure UFW is enabled and running
+  ansible.builtin.systemd:
+    name: ufw
+    state: started
+    enabled: true

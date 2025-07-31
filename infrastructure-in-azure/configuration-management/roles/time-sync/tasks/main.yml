@@ -1,0 +1,40 @@
+---
+- name: Install chrony
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+    update_cache: true
+
+- name: Configure chrony
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    backup: true
+    mode: '0644'
+  notify: Restart chrony
+
+- name: Start and enable chrony service
+  ansible.builtin.systemd:
+    name: chrony
+    state: started
+    enabled: true
+
+- name: Wait for chrony to start
+  ansible.builtin.wait_for:
+    timeout: 10
+  delegate_to: localhost
+
+- name: Force time synchronization
+  ansible.builtin.command: chronyc makestep
+  changed_when: true
+  failed_when: false
+
+- name: Check chrony sources
+  ansible.builtin.command: chronyc sources -v
+  register: chrony_sources
+  changed_when: false
+
+- name: Display chrony sources
+  ansible.builtin.debug:
+    var: chrony_sources.stdout_lines
+  when: chrony_sources is defined

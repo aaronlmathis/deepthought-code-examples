@@ -1,0 +1,24 @@
+# Staging environment variables
+environment_name: "staging"
+ssh_port: 22
+fail2ban_maxretry: 3
+fail2ban_bantime: 3600
+fail2ban_findtime: 600
+
+# System configuration
+timezone: "UTC"
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+  - 2.pool.ntp.org
+
+# Cron configuration
+backup_schedule: "0 3 * * *"  # Daily at 3 AM
+log_rotation_schedule: "0 4 * * *"  # Daily at 4 AM
+
+# Azure Monitor configuration
+azure_monitor_enabled: true
+
+# Staging specific settings
+debug_mode: false
+log_level: "info"

@@ -1,0 +1,6 @@
+.terraform*
+*.pub
+.env
+*.tfstate
+*.tfstate.*
+.ansible/

@@ -10,7 +10,7 @@ output "vm_name" {
 
 output "resource_group_name" {
   description = "Name of the Resource Group"
-  value       = azurerm_resource_group.rg.name
+  value       = data.azurerm_resource_group.rg.name
 }
 
 output "ssh_connection_command" {

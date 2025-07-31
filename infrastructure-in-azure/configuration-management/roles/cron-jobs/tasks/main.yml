@@ -1,0 +1,183 @@
+---
+- name: Install necessary packages for cron
+  ansible.builtin.package:
+    name:
+      - cron
+      - logrotate
+    state: present
+
+- name: Ensure cron service is running
+  ansible.builtin.systemd:
+    name: cron
+    state: started
+    enabled: true
+
+- name: Create backup directory
+  ansible.builtin.file:
+    path: /var/backups/system
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create backup scripts directory
+  ansible.builtin.file:
+    path: /opt/scripts
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create system backup script
+  ansible.builtin.copy:
+    dest: /opt/scripts/system_backup.sh
+    content: |
+      #!/bin/bash
+      # System backup script
+      set -e
+
+      BACKUP_DIR="/var/backups/system"
+      DATE=$(date +%Y%m%d_%H%M%S)
+      BACKUP_FILE="system_backup_${DATE}.tar.gz"
+
+      # Create backup
+      tar -czf "${BACKUP_DIR}/${BACKUP_FILE}" \
+          --exclude='/proc' \
+          --exclude='/tmp' \
+          --exclude='/sys' \
+          --exclude='/dev' \
+          --exclude='/var/backups' \
+          --exclude='/var/cache' \
+          --exclude='/var/tmp' \
+          /etc \
+          /home/{{ ansible_user }}/.ssh \
+          /var/log 2>/dev/null || true
+
+      # Keep only last 7 days of backups
+      find "${BACKUP_DIR}" -name "system_backup_*.tar.gz" -mtime +7 -delete
+
+      # Log backup completion
+      echo "$(date): System backup completed - ${BACKUP_FILE}" >> /var/log/backup.log
+    mode: '0755'
+
+- name: Create log rotation script
+  ansible.builtin.copy:
+    dest: /opt/scripts/log_rotation.sh
+    content: |
+      #!/bin/bash
+      # Log rotation script
+      set -e
+
+      # Rotate application logs
+      find /var/log -name "*.log" -size +100M -exec gzip {} \;
+      find /var/log -name "*.gz" -mtime +30 -delete
+
+      # Clean old journal logs
+      journalctl --vacuum-time=30d
+
+      # Log rotation completion
+      echo "$(date): Log rotation completed" >> /var/log/maintenance.log
+    mode: '0755'
+
+- name: Create system monitoring script
+  ansible.builtin.copy:
+    dest: /opt/scripts/system_monitor.sh
+    content: |
+      #!/bin/bash
+      # System monitoring script
+      set -e
+
+      LOG_FILE="/var/log/system_monitor.log"
+
+      # Check disk usage
+      DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+      if [ "$DISK_USAGE" -gt 85 ]; then
+          echo "$(date): WARNING - Disk usage is ${DISK_USAGE}%" >> "$LOG_FILE"
+      fi
+
+      # Check memory usage
+      MEM_USAGE=$(free | grep Mem | awk '{printf("%.0f", $3/$2 * 100.0)}')
+      if [ "$MEM_USAGE" -gt 90 ]; then
+          echo "$(date): WARNING - Memory usage is ${MEM_USAGE}%" >> "$LOG_FILE"
+      fi
+
+      # Log system status
+      echo "$(date): System check completed - Disk: ${DISK_USAGE}%, Memory: ${MEM_USAGE}%" >> "$LOG_FILE"
+    mode: '0755'
+
+- name: Set up log rotation for system logs
+  ansible.builtin.cron:
+    name: "logrotate system logs"
+    minute: "0"
+    hour: "0"
+    job: "/usr/sbin/logrotate /etc/logrotate.conf"
+    user: root
+
+- name: Clean temporary files daily
+  ansible.builtin.cron:
+    name: "clean temp files"
+    minute: "30"
+    hour: "3"
+    job: "find /tmp -type f -atime +7 -delete && find /var/tmp -type f -atime +30 -delete"
+    user: root
+
+- name: Update package cache weekly
+  ansible.builtin.cron:
+    name: "update package cache"
+    minute: "0"
+    hour: "2"
+    weekday: "0"
+    job: "apt-get update"
+    user: root
+
+- name: Security updates check
+  ansible.builtin.cron:
+    name: "security updates check"
+    minute: "0"
+    hour: "6"
+    job: "apt list --upgradable 2>/dev/null | grep -i security > /var/log/security-updates.log"
+    user: root
+
+- name: Disk usage monitoring
+  ansible.builtin.cron:
+    name: "disk usage alert"
+    minute: "*/30"
+    job: "df -h | awk '$5 > 80 {print $0}' | mail -s 'Disk Usage Alert' root@localhost"
+    user: root
+
+- name: System backup (if enabled)
+  ansible.builtin.cron:
+    name: "system backup"
+    minute: "0"
+    hour: "1"
+    job: "/opt/scripts/system_backup.sh"
+    user: root
+  when: enable_system_backup | default(false)
+
+- name: System monitoring cron job
+  ansible.builtin.cron:
+    name: "system monitoring"
+    minute: "*/15"
+    job: "/opt/scripts/system_monitor.sh"
+    user: root
+
+- name: Log rotation cron job
+  ansible.builtin.cron:
+    name: "log rotation"
+    minute: "0"
+    hour: "2"
+    job: "/opt/scripts/log_rotation.sh"
+    user: root
+
+- name: Create log files with proper permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: touch
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - /var/log/backup.log
+    - /var/log/maintenance.log
+    - /var/log/system_monitor.log
+    - /var/log/updates.log

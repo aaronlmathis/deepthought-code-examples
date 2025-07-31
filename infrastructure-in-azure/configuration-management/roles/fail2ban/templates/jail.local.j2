@@ -1,0 +1,32 @@
+[DEFAULT]
+# Ban hosts for one hour:
+bantime = {{ fail2ban_bantime }}
+
+# Override /etc/fail2ban/jail.d/00-firewalld.conf:
+banaction = ufw
+
+# A host is banned if it has generated "maxretry" during the last "findtime"
+# seconds.
+findtime = {{ fail2ban_findtime }}
+
+# "maxretry" is the number of failures before a host get banned.
+maxretry = {{ fail2ban_maxretry }}
+
+# Destination email address used solely for the interpolations in
+# jail.{conf,local,d/*} configuration files.
+destemail = root@localhost
+
+# Sender email address used solely for some actions
+sender = root@localhost
+
+# Email action configuration
+action = %(action_mw)s
+
+[sshd]
+enabled = true
+port = 22
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = {{ fail2ban_maxretry }}
+bantime = {{ fail2ban_bantime }}
+findtime = {{ fail2ban_findtime }}

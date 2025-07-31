@@ -70,6 +70,7 @@ variable "ssh_allowed_cidr" {
   default     = "69.92.191.166/32"
 }
 
+
 variable "image_publisher" {
   description = "VM image publisher"
   type        = string
@@ -79,13 +80,13 @@ variable "image_publisher" {
 variable "image_offer" {
   description = "VM image offer"
   type        = string
-  default     = "UbuntuServer"
+  default     = "0001-com-ubuntu-server-jammy"
 }
 
 variable "image_sku" {
   description = "VM image SKU"
   type        = string
-  default     = "18.04-LTS"
+  default     = "22_04-lts-gen2"
 }
 
 variable "image_version" {
@@ -104,6 +105,7 @@ variable "budget_threshold_percentage" {
   type        = number
   default     = 80
 }
+
 variable "alert_emails" {
   description = "Emails notified when threshold is met"
   type        = list(string)
